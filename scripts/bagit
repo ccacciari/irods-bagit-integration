@@ -17,10 +17,10 @@ if [ "$?" -ne "0" ]; then
 fi
 
 # register the package
-/bin/ireg -f -K "${FS_PATH}.tgz" "${IRODS_PATH}.tgz" 
+/bin/ireg -R ${IRODS_SOURCE_RES} -f -K "${FS_PATH}.tgz" "${IRODS_PATH}.tgz" 
 # if the registration fails, 
 if [ "$?" -ne "0" ]; then
-  echo "Failure: /bin/ireg -f -K ${FS_PATH}.tgz ${IRODS_PATH}.tgz"
+  echo "Failure: /bin/ireg /bin/ireg -R ${IRODS_SOURCE_RES} -f -K ${FS_PATH}.tgz ${IRODS_PATH}.tgz"
   # remove the package
   /bin/rm -r "${FS_PATH}.tgz"
   # revert back the collection
