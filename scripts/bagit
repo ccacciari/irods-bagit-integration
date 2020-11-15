@@ -44,4 +44,6 @@ if [ "$REMOVE_SOURCE" = true ]; then
   /bin/rmdir ${FS_PATH}
 fi
 
+echo "Successfully created the bagit package: ${IRODS_PATH}.tgz"
+
 exit 0
