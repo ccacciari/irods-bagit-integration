@@ -100,22 +100,44 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *cmd_name, *v
   *parent_coll = trimr("*coll_path", "/");
   # set the flag about removing the original collection
   if (*op == 'move') { *flag = 'true' }
-  else { *flag = 'false' }
+  else { 
+    *flag = 'false';
+  }
 
   # give the right permissions to the admin
-  msiSetACL("default", "admin:own", "*admin_user", *parent_coll)
-  msiSetACL("recursive", "admin:own", "*admin_user", *coll_path)
+  if (*owner != *admin_user) {
+    msiSetACL("default", "admin:own", "*admin_user", *parent_coll);
+    msiSetACL("recursive", "admin:own", "*admin_user", *coll_path);
+  }
 
-  msiExecCmd(*cmd_name, "*abs_path *coll_path *source_res *dest_res *flag", "*res_loc", "null", "null", *Result);
-  msiGetStdoutInExecCmdOut(*Result, *Out);
+  # in case of copy, check if the target package is already there
+  *skip_bagit = 'false';
+  if (*flag == 'false') {
+    *target_obj = "*coll_path" ++ ".tgz";
+    if (errorcode(msiObjStat(*target_obj, *stat)) >= 0) {
+      *skip_bagit = 'true';
+      *Out = "bagit package [*target_obj] already exists, nothing to do."
+    }
+  }
+  if (*skip_bagit == 'false') {
+    *msi_err = errorcode(msiExecCmd(*cmd_name, "*abs_path *coll_path *source_res *dest_res *flag", "*res_loc", "null", "null", *Result));
+    if (*msi_err >= 0) {
+      msiGetStdoutInExecCmdOut(*Result, *Out);
+    }
+    else {
+      msiGetStderrInExecCmdOut(*Result, *Out);
+    }
+  }
 
   # restore the original permissions
-  if (*flag == 'false') {
-    msiSetACL("recursive", "admin:null", "*admin_user", *coll_path);
+  if (*owner != *admin_user) {
+    if (*flag == 'false') {
+      msiSetACL("recursive", "admin:null", "*admin_user", *coll_path);
+    }
+    msiSetACL("default", "admin:own", "*owner", "*coll_path" ++ ".tgz");
+    msiSetACL("default", "admin:null", "*admin_user", "*coll_path" ++ ".tgz");
+    msiSetACL("default", "admin:null", "*admin_user", *parent_coll);
   }
-  msiSetACL("default", "admin:own", "*owner", "*coll_path" ++ ".tgz");
-  msiSetACL("default", "admin:null", "*admin_user", "*coll_path" ++ ".tgz");
-  msiSetACL("default", "admin:null", "*admin_user", *parent_coll);
 
   *Out
 }

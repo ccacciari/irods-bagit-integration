@@ -7,6 +7,13 @@ IRODS_TARGET_RES=$4
 REMOVE_SOURCE=$5
 
 BDBAG=$(/usr/bin/which bdbag)
+if [ "$?" -ne "0" ]; then
+  BDBAG=$(find $HOME -path *bin/bdbag)
+fi
+if [ -z "$BDBAG" ]; then
+  echo "Failure: bdbag command not found"
+  exit 1
+fi  
 
 # create the package
 ${BDBAG} ${FS_PATH} --archive tgz 
@@ -41,7 +48,7 @@ fi
 # remove both the iRODS collection and the FS folder
 if [ "$REMOVE_SOURCE" = true ]; then
   /bin/irm -f -r ${IRODS_PATH}
-  /bin/rmdir ${FS_PATH}
+  /bin/rm -r ${FS_PATH}
 fi
 
 echo "Successfully created the bagit package: ${IRODS_PATH}.tgz"
