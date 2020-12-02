@@ -169,3 +169,116 @@ SURFbagitBatch(*default_resc, *admin_user, *cmd) {
 
   *response;
 }
+
+
+SURFunbagit(*bag_path, *source_res, *dest_res, *owner, *admin_user, *cmd_name, *vault_path, *op) {
+
+  writeLine("serverLog", "[SURFunbagit] collection: *bag_path, source resource: *source_res, "
+           ++ "destination resource: *dest_res, admin user: *admin_user, command: *cmd_name, "
+           ++ "vault: *vault_path, operation: *op");
+
+  # get vault path of destination resource
+  msiMakeGenQuery("RESC_VAULT_PATH", "RESC_NAME = '*dest_res'", *genQIn0);
+  msiExecGenQuery(*genQIn0, *genQOut0);
+  foreach(*genQOut0){
+    msiGetValByKey(*genQOut0, "RESC_VAULT_PATH", *vault_path_dest);
+  }
+
+  # get the file system absolute path of the collection
+  *tokens = split("*bag_path","/");
+  *rel_path = "";
+  foreach(*E in tl(*tokens)) {
+    *rel_path = *rel_path ++ "/" ++ *E;
+  }
+  *abs_path = *vault_path_dest ++ *rel_path;
+
+  writeLine("serverLog","abs path *abs_path rel_path *rel_path")
+
+  # get the hostname of the destination resource
+  msiMakeGenQuery("RESC_LOC", "RESC_NAME = '*dest_res'", *genQIn1);
+  msiExecGenQuery(*genQIn1, *genQOut1);
+  foreach(*genQOut1){
+    msiGetValByKey(*genQOut1, "RESC_LOC", *res_loc);
+  }
+  writeLine("serverLog","res_loc *res_loc")
+
+
+  # get the parent collection
+  *parent_coll = trimr("*bag_path", "/");
+  writeLine("serverLog","parent_coll *parent_coll")
+
+  # set the flag about removing the original collection
+  if (*op == 'move') { *flag = 'true' }
+  else { 
+    *flag = 'false';
+  }
+
+  # give the right permissions to the admin
+  if (*owner != *admin_user) {
+    msiSetACL("default", "admin:own", "*admin_user", *parent_coll);
+    msiSetACL("default", "admin:own", "*admin_user", *bag_path);
+  }
+
+  *msi_err = errorcode(msiExecCmd(*cmd_name, "*abs_path *bag_path *source_res *dest_res *flag", "*res_loc", "null", "null", *Result));
+  if (*msi_err >= 0) {
+    msiGetStdoutInExecCmdOut(*Result, *Out);
+  }
+
+  if(*bag_path like "*.tar") {
+	*coll_path = trimr(*bag_path,".tar")
+  }
+  else if(*bag_path like "*.tgz") {
+	*coll_path = trimr(*bag_path,".tgz")
+  }
+  else if(*bag_path like "*.zip") {
+	*coll_path = trimr(*bag_path,".zip")
+  }
+  else {
+	*coll_path = *bag_path
+  }
+
+  # restore the original permissions
+  if (*owner != *admin_user) {
+    if (*flag == 'false') {
+      msiSetACL("default", "admin:null", "*admin_user", *bag_path);
+    }
+    msiSetACL("recursive", "admin:own", "*owner", "*coll_path");
+    msiSetACL("recursive", "admin:null", "*admin_user", "*coll_path");
+    msiSetACL("default", "admin:null", "*admin_user", *parent_coll);
+  }
+
+  *Out
+}
+
+
+
+SURFunbagitBatch(*default_resc, *admin_user, *cmd) {
+
+  writeLine("serverLog", "[SURFunbagitBatch] default resource: *default_resc, admin: *admin_user, command: *cmd");
+  msiMakeGenQuery("RESC_VAULT_PATH", "RESC_NAME = '*default_resc'", *genQIn0);
+  msiExecGenQuery(*genQIn0, *genQOut0);
+  foreach(*genQOut0){
+    msiGetValByKey(*genQOut0, "RESC_VAULT_PATH", *vault_path);
+  }
+
+  *response = "";
+  msiMakeGenQuery("COLL_NAME, DATA_NAME, DATA_OWNER_NAME, META_DATA_ATTR_NAME, META_DATA_ATTR_VALUE, META_DATA_ATTR_UNITS", "META_DATA_ATTR_NAME = 'SURFunbagit'", *genQIn);
+  msiExecGenQuery(*genQIn, *genQOut);
+  foreach(*genQOut){
+    msiGetValByKey(*genQOut, "COLL_NAME", *coll_path);
+    msiGetValByKey(*genQOut, "DATA_NAME", *bag_file);
+    msiGetValByKey(*genQOut, "META_DATA_ATTR_NAME", *name);
+    msiGetValByKey(*genQOut, "META_DATA_ATTR_VALUE", *dest_res);
+    msiGetValByKey(*genQOut, "META_DATA_ATTR_UNITS", *operation);
+    msiGetValByKey(*genQOut, "DATA_OWNER_NAME", *owner);
+
+    *path = *coll_path ++ "/" ++ *bag_file
+
+    *resp = SURFunbagit(*path, *default_resc, *dest_res, *owner, *admin_user, *cmd, *vault_path, *operation);
+    writeLine("serverLog", "[SURFunbagitBatch] *resp");
+    *response = *response ++ "*resp" ++ "; ";
+  }
+
+  *response;
+}
+

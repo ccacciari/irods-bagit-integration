@@ -10,8 +10,10 @@ BDBAG=$(/usr/bin/which bdbag)
 
 tokens=($(echo ${IRODS_PATH} | tr "." "\n"))
 IRODS_COLL_PATH=${tokens[0]}
+echo $IRODS_COLL_PATH
 tokens=($(echo ${FS_PATH} | tr "." "\n"))
 FS_COLL_PATH=${tokens[0]}
+echo $FS_COLL_PATH
 
 # replicate the package
 /bin/irepl -M -S ${IRODS_SOURCE_RES} -R ${IRODS_TARGET_RES} ${IRODS_PATH}
