@@ -7,13 +7,13 @@ IRODS_TARGET_RES=$4
 REMOVE_SOURCE=$5
 
 BDBAG=$(/usr/bin/which bdbag)
+MD_MANAGER=/etc/irods/irods_avu_translator.py
+PYTHON3=$(/usr/bin/which python3)
 
 tokens=($(echo ${IRODS_PATH} | tr "." "\n"))
 IRODS_COLL_PATH=${tokens[0]}
-echo $IRODS_COLL_PATH
 tokens=($(echo ${FS_PATH} | tr "." "\n"))
 FS_COLL_PATH=${tokens[0]}
-echo $FS_COLL_PATH
 
 # replicate the package
 /bin/irepl -M -S ${IRODS_SOURCE_RES} -R ${IRODS_TARGET_RES} ${IRODS_PATH}
@@ -27,7 +27,7 @@ ${BDBAG} --materialize "${FS_PATH}"
 # revert the collection structure
 ${BDBAG} --revert "${FS_COLL_PATH}"
 # register the collection
-/bin/ireg -f -C -K "${FS_COLL_PATH}" "${IRODS_COLL_PATH}"
+/bin/ireg -R ${IRODS_TARGET_RES} -f -C -K "${FS_COLL_PATH}" "${IRODS_COLL_PATH}"
 # if the registration fails,
 if [ "$?" -ne "0" ]; then
   echo "Failure: /bin/ireg -f -C -K ${FS_COLL_PATH} ${IRODS_COLL_PATH}"
@@ -36,6 +36,13 @@ if [ "$?" -ne "0" ]; then
   # remove the replica
   /bin/itrim -M -S ${IRODS_TARGET_RES} -N 1 ${IRODS_PATH}
   exit 1
+fi
+
+# import the metadata
+if [ -f "${FS_COLL_PATH}/irods_exported_metadata.json" ]; then
+  metadata_opt="-md"
+  ${PYTHON3} ${MD_MANAGER} -fl ${metadata_opt} ${IRODS_COLL_PATH} collection -i "${FS_COLL_PATH}/irods_exported_metadata.json"
+  /bin/irm -f "${IRODS_COLL_PATH}/irods_exported_metadata.json"
 fi
 
 if [ "$REMOVE_SOURCE" = true ]; then

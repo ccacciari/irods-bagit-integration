@@ -129,11 +129,15 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd_
   *operations = split("*op","::");
   *transfer_option = hd(*operations);
   *compress = "tgz";
+  *metadata = "";
   if (size(tl(*operations)) > 0) {
     *operations = tl(*operations);
     *compress = hd(*operations);
   }
-  writeLine("serverLog", "[SURFbagit] origin: *op, transfer: *transfer_option, compress: *compress")
+  if (size(tl(*operations)) > 0) {
+    *operations = tl(*operations);
+    *metadata = hd(*operations);
+  }
   # set the flag about removing the original collection
   if (*transfer_option == 'move') { *flag = 'true' }
   else { 
@@ -154,7 +158,8 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd_
     }
   }
   if (*skip_bagit == 'false') {
-    *msi_err = errorcode(msiExecCmd(*cmd_name, "*abs_path *coll_path *source_res *dest_res *flag *compress", "*res_loc", "null", "null", *Result));
+    *msi_err = errorcode(msiExecCmd(*cmd_name, "*abs_path *coll_path *source_res *dest_res *flag *compress *metadata", 
+                                    "*res_loc", "null", "null", *Result));
     if (*msi_err >= 0) {
       msiGetStdoutInExecCmdOut(*Result, *Out);
     }

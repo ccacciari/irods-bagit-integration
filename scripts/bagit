@@ -6,9 +6,20 @@ IRODS_SOURCE_RES=$3
 IRODS_TARGET_RES=$4
 REMOVE_SOURCE=$5
 COMPRESS=$6
+METADATA=$7
 
 BDBAG=$(/usr/bin/which bdbag)
+MD_MANAGER=/etc/irods/irods_avu_translator.py
+PYTHON3=$(/usr/bin/which python3)
 
+# manage the metadata option
+if [ -n "$METADATA" ]; then
+  metadata_opt="-md"
+  if [ "$METADATA" = "avu"  ]; then
+    metadata_opt="-md"
+  fi
+  ${PYTHON3} ${MD_MANAGER} -md -fl -r ${IRODS_PATH} collection -e "${FS_PATH}/irods_exported_metadata.json"
+fi
 # manage the compression option
 archive_opt="tgz"
 if [ -n "$COMPRESS" ]; then
