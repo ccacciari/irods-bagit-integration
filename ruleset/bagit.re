@@ -125,8 +125,17 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd_
 
   # get the parent collection
   *parent_coll = trimr("*coll_path", "/");
+  # get the list of requested operations
+  *operations = split("*op","::");
+  *transfer_option = hd(*operations);
+  *compress = "tgz";
+  if (size(tl(*operations)) > 0) {
+    *operations = tl(*operations);
+    *compress = hd(*operations);
+  }
+  writeLine("serverLog", "[SURFbagit] origin: *op, transfer: *transfer_option, compress: *compress")
   # set the flag about removing the original collection
-  if (*op == 'move') { *flag = 'true' }
+  if (*transfer_option == 'move') { *flag = 'true' }
   else { 
     *flag = 'false';
   }
@@ -138,14 +147,14 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd_
   # in case of copy, check if the target package is already there
   *skip_bagit = 'false';
   if (*flag == 'false') {
-    *target_obj = "*coll_path" ++ ".tgz";
+    *target_obj = "*coll_path" ++ ".*compress";
     if (errorcode(msiObjStat(*target_obj, *stat)) >= 0) {
       *skip_bagit = 'true';
       *Out = "bagit package [*target_obj] already exists, nothing to do."
     }
   }
   if (*skip_bagit == 'false') {
-    *msi_err = errorcode(msiExecCmd(*cmd_name, "*abs_path *coll_path *source_res *dest_res *flag", "*res_loc", "null", "null", *Result));
+    *msi_err = errorcode(msiExecCmd(*cmd_name, "*abs_path *coll_path *source_res *dest_res *flag *compress", "*res_loc", "null", "null", *Result));
     if (*msi_err >= 0) {
       msiGetStdoutInExecCmdOut(*Result, *Out);
     }
@@ -156,16 +165,16 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd_
 
   # restore the original permissions
   foreach(*user in *users) {
-    msiSetACL("default", "admin:own", "*user", "*coll_path" ++ ".tgz");
+    msiSetACL("default", "admin:own", "*user", "*coll_path" ++ ".*compress");
   }
   if (size(*users) == 0) {
-    msiSetACL("default", "admin:own", "*owner", "*coll_path" ++ ".tgz");
+    msiSetACL("default", "admin:own", "*owner", "*coll_path" ++ ".*compress");
   }
   if (! SURFcontains(*users,*admin_user)) {
     if (*flag == 'false') {
       msiSetACL("recursive", "admin:null", "*admin_user", *coll_path);
     }
-    msiSetACL("default", "admin:null", "*admin_user", "*coll_path" ++ ".tgz");
+    msiSetACL("default", "admin:null", "*admin_user", "*coll_path" ++ ".*compress");
     msiSetACL("default", "admin:null", "*admin_user", *parent_coll);
   }
 

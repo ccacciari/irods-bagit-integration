@@ -5,37 +5,36 @@ IRODS_PATH=$2
 IRODS_SOURCE_RES=$3
 IRODS_TARGET_RES=$4
 REMOVE_SOURCE=$5
+COMPRESS=$6
 
 BDBAG=$(/usr/bin/which bdbag)
-if [ "$?" -ne "0" ]; then
-  BDBAG=$(find $HOME -path *bin/bdbag)
-fi
-if [ -z "$BDBAG" ]; then
-  echo "Failure: bdbag command not found"
-  exit 1
-fi  
 
+# manage the compression option
+archive_opt="tgz"
+if [ -n "$COMPRESS" ]; then
+  archive_opt=$COMPRESS
+fi
 # create the package
-${BDBAG} ${FS_PATH} --archive tgz 
+${BDBAG} ${FS_PATH} --archive ${archive_opt}
 # if the package creation fails, exit
 if [ "$?" -ne "0" ]; then
-  echo "Failure: ${BDBAG} ${FS_PATH} --archive tgz"
+  echo "Failure: ${BDBAG} ${FS_PATH} --archive ${archive_opt}"
   exit 1
 fi
 
 # register the package
-/bin/ireg -R ${IRODS_SOURCE_RES} -f -K "${FS_PATH}.tgz" "${IRODS_PATH}.tgz" 
+/bin/ireg -R ${IRODS_SOURCE_RES} -f -K "${FS_PATH}.${archive_opt}" "${IRODS_PATH}.${archive_opt}" 
 # if the registration fails, 
 if [ "$?" -ne "0" ]; then
-  echo "Failure: /bin/ireg /bin/ireg -R ${IRODS_SOURCE_RES} -f -K ${FS_PATH}.tgz ${IRODS_PATH}.tgz"
+  echo "Failure: /bin/ireg /bin/ireg -R ${IRODS_SOURCE_RES} -f -K ${FS_PATH}.${archive_opt} ${IRODS_PATH}.${archive_opt}"
   # remove the package
-  /bin/rm -r "${FS_PATH}.tgz"
+  /bin/rm -r "${FS_PATH}.${archive_opt}"
   # revert back the collection
   ${BDBAG} --revert ${FS_PATH}
   exit 1
 # if the registration succeeds, move the package to the target resource
 else
-  /bin/iphymv -M -S ${IRODS_SOURCE_RES} -R ${IRODS_TARGET_RES} "${IRODS_PATH}.tgz"
+  /bin/iphymv -M -S ${IRODS_SOURCE_RES} -R ${IRODS_TARGET_RES} "${IRODS_PATH}.${archive_opt}"
 fi
 
 # revert back the collection
@@ -48,9 +47,9 @@ fi
 # remove both the iRODS collection and the FS folder
 if [ "$REMOVE_SOURCE" = true ]; then
   /bin/irm -f -r ${IRODS_PATH}
-  /bin/rm -r ${FS_PATH}
+  /bin/rmdir ${FS_PATH}
 fi
 
-echo "Successfully created the bagit package: ${IRODS_PATH}.tgz"
+echo "Successfully created the bagit package: ${IRODS_PATH}.${archive_opt}"
 
 exit 0
