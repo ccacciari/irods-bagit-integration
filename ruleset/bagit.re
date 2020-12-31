@@ -2,6 +2,7 @@
 #########################################
 
 SURFcontains(*list,*elem) {
+  # check if *elem is included in the list *list
   *ret = false;
   foreach(*e in *list) {
     if(*e == *elem) {
@@ -9,6 +10,32 @@ SURFcontains(*list,*elem) {
     }
   }
 *ret;
+}
+
+
+SURFgetOwners(*path) {
+  # get all the users who are owners of the collection/object
+  *users = list()
+  msiGetObjType(*path, *type);
+  if (*type == "-c") {
+    # the query for the collection
+    msiMakeGenQuery("USER_NAME, USER_ZONE", "COLL_NAME = '*path' AND COLL_ACCESS_NAME = 'own'", *genQIn1);
+  }
+  else if (*type == "-d") {
+    # the query for the object
+    msiSplitPath(*path, *coll, *object);
+    msiMakeGenQuery("USER_NAME, USER_ZONE", "COLL_NAME = '*coll' AND DATA_NAME = '*object' AND DATA_ACCESS_NAME = 'own'", *genQIn1);
+  }
+  msiExecGenQuery(*genQIn1, *genQOut1);
+  foreach(*genQOut1){
+    # loop over all the users and create a list
+    msiGetValByKey(*genQOut1, "USER_NAME", *user_name);
+    msiGetValByKey(*genQOut1, "USER_ZONE", *user_zone);
+    *user = *user_name ++ "#" ++ *user_zone;
+    *users = cons(*user, *users);
+  }
+
+  *users
 }
 
 
@@ -73,7 +100,7 @@ SURFbagitAlignDataResources(*coll_path, *dest_res) {
 }
 
 
-SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *cmd_name, *vault_path, *op) {
+SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd_name, *vault_path, *op) {
 
   writeLine("serverLog", "[SURFbagit] collection: *coll_path, source resource: *source_res, "
            ++ "destination resource: *dest_res, admin user: *admin_user, command: *cmd_name, "
@@ -105,10 +132,8 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *cmd_name, *v
   }
 
   # give the right permissions to the admin
-  if (*owner != *admin_user) {
-    msiSetACL("default", "admin:own", "*admin_user", *parent_coll);
-    msiSetACL("recursive", "admin:own", "*admin_user", *coll_path);
-  }
+  msiSetACL("default", "admin:own", "*admin_user", *parent_coll);
+  msiSetACL("recursive", "admin:own", "*admin_user", *coll_path);
 
   # in case of copy, check if the target package is already there
   *skip_bagit = 'false';
@@ -130,11 +155,16 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *cmd_name, *v
   }
 
   # restore the original permissions
-  if (*owner != *admin_user) {
+  foreach(*user in *users) {
+    msiSetACL("default", "admin:own", "*user", "*coll_path" ++ ".tgz");
+  }
+  if (size(*users) == 0) {
+    msiSetACL("default", "admin:own", "*owner", "*coll_path" ++ ".tgz");
+  }
+  if (! SURFcontains(*users,*admin_user)) {
     if (*flag == 'false') {
       msiSetACL("recursive", "admin:null", "*admin_user", *coll_path);
     }
-    msiSetACL("default", "admin:own", "*owner", "*coll_path" ++ ".tgz");
     msiSetACL("default", "admin:null", "*admin_user", "*coll_path" ++ ".tgz");
     msiSetACL("default", "admin:null", "*admin_user", *parent_coll);
   }
@@ -153,16 +183,21 @@ SURFbagitBatch(*default_resc, *admin_user, *cmd) {
   }
 
   *response = "";
-  msiMakeGenQuery("COLL_NAME, COLL_OWNER_NAME, META_COLL_ATTR_NAME, META_COLL_ATTR_VALUE, META_COLL_ATTR_UNITS", "META_COLL_ATTR_NAME = 'SURFbagit'", *genQIn);
+  msiMakeGenQuery("COLL_NAME, COLL_OWNER_NAME, COLL_OWNER_ZONE, META_COLL_ATTR_NAME, META_COLL_ATTR_VALUE, META_COLL_ATTR_UNITS", 
+                  "META_COLL_ATTR_NAME = 'SURFbagit'", *genQIn);
   msiExecGenQuery(*genQIn, *genQOut);
   foreach(*genQOut){
     msiGetValByKey(*genQOut, "COLL_NAME", *path);
     msiGetValByKey(*genQOut, "META_COLL_ATTR_NAME", *name);
     msiGetValByKey(*genQOut, "META_COLL_ATTR_VALUE", *dest_res);
     msiGetValByKey(*genQOut, "META_COLL_ATTR_UNITS", *operation);
-    msiGetValByKey(*genQOut, "COLL_OWNER_NAME", *owner);
+    msiGetValByKey(*genQOut, "COLL_OWNER_NAME", *owner_name);
+    msiGetValByKey(*genQOut, "COLL_OWNER_ZONE", *owner_zone);
 
-    *resp = SURFbagit(*path, *default_resc, *dest_res, *owner, *admin_user, *cmd, *vault_path, *operation);
+    *owner = *owner_name ++ "#" ++ *owner_zone
+    *users = SURFgetOwners(*path)    
+
+    *resp = SURFbagit(*path, *default_resc, *dest_res, *owner, *admin_user, *users, *cmd, *vault_path, *operation);
     writeLine("serverLog", "[SURFbagitBatch] *resp");
     *response = *response ++ "*resp" ++ "; ";
   }
@@ -171,11 +206,11 @@ SURFbagitBatch(*default_resc, *admin_user, *cmd) {
 }
 
 
-SURFunbagit(*bag_path, *source_res, *dest_res, *owner, *admin_user, *cmd_name, *vault_path, *op) {
+SURFunbagit(*bag_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd_name, *op) {
 
   writeLine("serverLog", "[SURFunbagit] collection: *bag_path, source resource: *source_res, "
            ++ "destination resource: *dest_res, admin user: *admin_user, command: *cmd_name, "
-           ++ "vault: *vault_path, operation: *op");
+           ++ "operation: *op");
 
   # get vault path of destination resource
   msiMakeGenQuery("RESC_VAULT_PATH", "RESC_NAME = '*dest_res'", *genQIn0);
@@ -192,20 +227,15 @@ SURFunbagit(*bag_path, *source_res, *dest_res, *owner, *admin_user, *cmd_name, *
   }
   *abs_path = *vault_path_dest ++ *rel_path;
 
-  writeLine("serverLog","abs path *abs_path rel_path *rel_path")
-
   # get the hostname of the destination resource
   msiMakeGenQuery("RESC_LOC", "RESC_NAME = '*dest_res'", *genQIn1);
   msiExecGenQuery(*genQIn1, *genQOut1);
   foreach(*genQOut1){
     msiGetValByKey(*genQOut1, "RESC_LOC", *res_loc);
   }
-  writeLine("serverLog","res_loc *res_loc")
-
 
   # get the parent collection
   *parent_coll = trimr("*bag_path", "/");
-  writeLine("serverLog","parent_coll *parent_coll")
 
   # set the flag about removing the original collection
   if (*op == 'move') { *flag = 'true' }
@@ -214,14 +244,15 @@ SURFunbagit(*bag_path, *source_res, *dest_res, *owner, *admin_user, *cmd_name, *
   }
 
   # give the right permissions to the admin
-  if (*owner != *admin_user) {
-    msiSetACL("default", "admin:own", "*admin_user", *parent_coll);
-    msiSetACL("default", "admin:own", "*admin_user", *bag_path);
-  }
+  msiSetACL("default", "admin:own", "*admin_user", *parent_coll);
+  msiSetACL("default", "admin:own", "*admin_user", *bag_path);
 
   *msi_err = errorcode(msiExecCmd(*cmd_name, "*abs_path *bag_path *source_res *dest_res *flag", "*res_loc", "null", "null", *Result));
   if (*msi_err >= 0) {
     msiGetStdoutInExecCmdOut(*Result, *Out);
+  }
+  else {
+    msiGetStderrInExecCmdOut(*Result, *Out);
   }
 
   if(*bag_path like "*.tar") {
@@ -238,11 +269,16 @@ SURFunbagit(*bag_path, *source_res, *dest_res, *owner, *admin_user, *cmd_name, *
   }
 
   # restore the original permissions
-  if (*owner != *admin_user) {
+  foreach(*user in *users) {
+    msiSetACL("recursive", "admin:own", "*user", "*coll_path");
+  }
+  if (size(*users) == 0) {
+    msiSetACL("recursive", "admin:own", "*owner", "*coll_path");
+  }
+  if (! SURFcontains(*users,*admin_user)) {
     if (*flag == 'false') {
       msiSetACL("default", "admin:null", "*admin_user", *bag_path);
     }
-    msiSetACL("recursive", "admin:own", "*owner", "*coll_path");
     msiSetACL("recursive", "admin:null", "*admin_user", "*coll_path");
     msiSetACL("default", "admin:null", "*admin_user", *parent_coll);
   }
@@ -251,18 +287,13 @@ SURFunbagit(*bag_path, *source_res, *dest_res, *owner, *admin_user, *cmd_name, *
 }
 
 
-
 SURFunbagitBatch(*default_resc, *admin_user, *cmd) {
 
   writeLine("serverLog", "[SURFunbagitBatch] default resource: *default_resc, admin: *admin_user, command: *cmd");
-  msiMakeGenQuery("RESC_VAULT_PATH", "RESC_NAME = '*default_resc'", *genQIn0);
-  msiExecGenQuery(*genQIn0, *genQOut0);
-  foreach(*genQOut0){
-    msiGetValByKey(*genQOut0, "RESC_VAULT_PATH", *vault_path);
-  }
 
   *response = "";
-  msiMakeGenQuery("COLL_NAME, DATA_NAME, DATA_OWNER_NAME, META_DATA_ATTR_NAME, META_DATA_ATTR_VALUE, META_DATA_ATTR_UNITS", "META_DATA_ATTR_NAME = 'SURFunbagit'", *genQIn);
+  msiMakeGenQuery("COLL_NAME, DATA_NAME, DATA_OWNER_NAME, DATA_OWNER_ZONE, META_DATA_ATTR_NAME, META_DATA_ATTR_VALUE, META_DATA_ATTR_UNITS", 
+                  "META_DATA_ATTR_NAME = 'SURFunbagit'", *genQIn);
   msiExecGenQuery(*genQIn, *genQOut);
   foreach(*genQOut){
     msiGetValByKey(*genQOut, "COLL_NAME", *coll_path);
@@ -270,11 +301,14 @@ SURFunbagitBatch(*default_resc, *admin_user, *cmd) {
     msiGetValByKey(*genQOut, "META_DATA_ATTR_NAME", *name);
     msiGetValByKey(*genQOut, "META_DATA_ATTR_VALUE", *dest_res);
     msiGetValByKey(*genQOut, "META_DATA_ATTR_UNITS", *operation);
-    msiGetValByKey(*genQOut, "DATA_OWNER_NAME", *owner);
+    msiGetValByKey(*genQOut, "DATA_OWNER_NAME", *owner_name);
+    msiGetValByKey(*genQOut, "DATA_OWNER_ZONE", *owner_zone);
 
+    *owner = *owner_name ++ "#" ++ *owner_zone
     *path = *coll_path ++ "/" ++ *bag_file
+    *users = SURFgetOwners(*path)
 
-    *resp = SURFunbagit(*path, *default_resc, *dest_res, *owner, *admin_user, *cmd, *vault_path, *operation);
+    *resp = SURFunbagit(*path, *default_resc, *dest_res, *owner, *admin_user, *users, *cmd, *operation);
     writeLine("serverLog", "[SURFunbagitBatch] *resp");
     *response = *response ++ "*resp" ++ "; ";
   }

@@ -1,7 +1,7 @@
 unbagitRule {
 
-  *DEFAULT_RESC = 'irodsResc2'
-  *ADMIN_USER = 'rods'
+  *DEFAULT_RESC = 'surfArchive'
+  *ADMIN_USER = 'rods#surfZone'
   *CMD = 'unbagit'
 
   *response = SURFunbagitBatch(*DEFAULT_RESC, *ADMIN_USER, *CMD);
