@@ -19,11 +19,40 @@ value: archive
 units: copy
 ```
 
+The rule SURFunbagitBatch works in a similar way, but applied to bagit archives:
 
-The two scripts "bagit" and "unbagit" must be placed in /var/lib/irods/msiExecCmd_bin.
-Both the rules SURFbagit and SURFbagitBatch must be executed by a user with administrator privileges.
+```
+$ imeta set -d mylibrary.zip SURFunbagit demoResc move
+```
+
+The two scripts "bagit" and "unbagit" must be placed in /var/lib/irods/msiExecCmd_bin.  
+The rules SURFbagit, SURFunbagit, SURFbagitBatch and SURFunbagitBatch must be executed by a user with administrator privileges.  
+
+## Compression
+It is possible to choose the archive format among three options: zip, tgz, tar. Adding the desired option as metadata:  
+
+```
+$ imeta set -C /surfTestZone2/home/claudio/mylibrary2 SURFbagit archive copy::zip
+```
+
+This option is taken into account only by the SURFbagitBatch rule.  
+If no compression option is set, then "tgz" is the default.  
+
+## Metadata
+It is possible to export the irods avus as a json file included in the bagit archive.  
+To enable this feature is necessary to deploy the script available here:  
+https://git.ia.surfsara.nl/data-management-services/irods-metadata-translator  
+
+It should be placed in /etc/irods. It requires both python packages irods-avu-json and python-irodsclient.
+Then it possible to export the metadata adding the following option in the usual way:
+
+```
+$ imeta set -C /surfTestZone2/home/claudio/mylibrary2 SURFbagit archive copy::zip::avu
+```
+
+The metadata are exported recursively for all the sub-collections and objects present under the main collection.  
+Pay attention that the position of the three options is important: \[copy|move\]::\[zip|tar|tgz\]::\[avu\]  
+The SURFunbagitBatch checks automatically if the exported metadata are available within the bagit package and if it is the case than they are imported back to iRODS.  
 
 ## TODO
-The unbagit rule can not be executed in asynchronous mode yet.  
-Only for the unbagit process, the admin user is still forced to manually change the permission on the target folder and restore the original permissions on the archived bagit package.  
 Performance optimization has not been investigated, in particular about the checksum computation with bdbag.  
