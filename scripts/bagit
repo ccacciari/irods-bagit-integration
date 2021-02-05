@@ -9,17 +9,16 @@ COMPRESS=$6
 METADATA=$7
 
 BDBAG=$(/usr/bin/which bdbag)
-MD_MANAGER=/etc/irods/irods_avu_translator.py
+MD_MANAGER=/etc/irods/scripts/irods_md_translator.py
+MD_FILTERS=/etc/irods/metadata-filters_deny.json
 PYTHON3=$(/usr/bin/which python3)
 
 # manage the metadata option
-if [ -n "$METADATA" ]; then
-  metadata_opt="-md"
-  if [ "$METADATA" = "avu"  ]; then
-    metadata_opt="-md"
-  fi
-  ${PYTHON3} ${MD_MANAGER} -md -fl -r ${IRODS_PATH} collection -e "${FS_PATH}/irods_exported_metadata.json"
+metadata_opt="-md"
+if [ "$METADATA" = "acl"  ]; then
+  metadata_opt="-md -acl"
 fi
+${PYTHON3} ${MD_MANAGER} -f ${MD_FILTERS} ${metadata_opt} -fl -r ${IRODS_PATH} collection -e "${FS_PATH}/irods_exported_metadata.json"
 # manage the compression option
 archive_opt="tgz"
 if [ -n "$COMPRESS" ]; then

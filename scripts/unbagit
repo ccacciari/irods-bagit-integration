@@ -7,7 +7,8 @@ IRODS_TARGET_RES=$4
 REMOVE_SOURCE=$5
 
 BDBAG=$(/usr/bin/which bdbag)
-MD_MANAGER=/etc/irods/irods_avu_translator.py
+MD_MANAGER=/etc/irods/scripts/irods_md_translator.py
+MD_FILTERS=/etc/irods/metadata-filters_deny.json
 PYTHON3=$(/usr/bin/which python3)
 
 tokens=($(echo ${IRODS_PATH} | tr "." "\n"))
@@ -41,7 +42,7 @@ fi
 # import the metadata
 if [ -f "${FS_COLL_PATH}/irods_exported_metadata.json" ]; then
   metadata_opt="-md"
-  ${PYTHON3} ${MD_MANAGER} -fl ${metadata_opt} ${IRODS_COLL_PATH} collection -i "${FS_COLL_PATH}/irods_exported_metadata.json"
+  ${PYTHON3} ${MD_MANAGER} -f ${MD_FILTERS} -fl ${metadata_opt} -r ${IRODS_COLL_PATH} collection -i "${FS_COLL_PATH}/irods_exported_metadata.json"
   /bin/irm -f "${IRODS_COLL_PATH}/irods_exported_metadata.json"
 fi
 
@@ -50,5 +51,7 @@ if [ "$REMOVE_SOURCE" = true ]; then
 else
   /bin/itrim -M -S ${IRODS_TARGET_RES} -N 1 ${IRODS_PATH}
 fi
+
+echo "Successfully unbagit the collection: ${IRODS_COLL_PATH}"
 
 exit 0

@@ -198,7 +198,7 @@ SURFbagitBatch(*default_resc, *admin_user, *cmd) {
 
   *response = "";
   msiMakeGenQuery("COLL_NAME, COLL_OWNER_NAME, COLL_OWNER_ZONE, META_COLL_ATTR_NAME, META_COLL_ATTR_VALUE, META_COLL_ATTR_UNITS", 
-                  "META_COLL_ATTR_NAME = 'SURFbagit'", *genQIn);
+                  "META_COLL_ATTR_NAME = 'SURFbagit' AND COLL_NAME not like '/%/trash/%'", *genQIn);
   msiExecGenQuery(*genQIn, *genQOut);
   foreach(*genQOut){
     msiGetValByKey(*genQOut, "COLL_NAME", *path);

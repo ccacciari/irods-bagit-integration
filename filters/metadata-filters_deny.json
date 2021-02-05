@@ -1,0 +1,6 @@
+{
+"deny":[
+        {"a":"SURFbagit"},
+        {"a":"SURFunbagit"}
+       ] 
+}
