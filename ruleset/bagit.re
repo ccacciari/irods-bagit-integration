@@ -307,7 +307,7 @@ SURFunbagitBatch(*default_resc, *admin_user, *cmd) {
 
   *response = "";
   msiMakeGenQuery("COLL_NAME, DATA_NAME, DATA_OWNER_NAME, DATA_OWNER_ZONE, META_DATA_ATTR_NAME, META_DATA_ATTR_VALUE, META_DATA_ATTR_UNITS", 
-                  "META_DATA_ATTR_NAME = 'SURFunbagit'", *genQIn);
+                  "META_DATA_ATTR_NAME = 'SURFunbagit' AND COLL_NAME not like '/%/trash/%'", *genQIn);
   msiExecGenQuery(*genQIn, *genQOut);
   foreach(*genQOut){
     msiGetValByKey(*genQOut, "COLL_NAME", *coll_path);
