@@ -11,6 +11,7 @@ MD_MANAGER=/etc/irods/scripts/irods_md_translator.py
 MD_FILTERS=/etc/irods/metadata-filters_deny.json
 PYTHON3=$(/usr/bin/which python3)
 
+# get the collection path removing the suffix after the character '.'
 tokens=($(echo ${IRODS_PATH} | tr "." "\n"))
 IRODS_COLL_PATH=${tokens[0]}
 tokens=($(echo ${FS_PATH} | tr "." "\n"))
@@ -22,6 +23,10 @@ FS_COLL_PATH=${tokens[0]}
 if [ "$?" -ne "0" ]; then
   echo "Failure: /bin/irepl -M -S ${IRODS_SOURCE_RES} -R ${IRODS_TARGET_RES} ${IRODS_PATH}"
   exit 1
+fi
+# check if the collection already exists on the fs and remove it
+if [ -d "${FS_COLL_PATH}" ]; then
+  /bin/rmdir "${FS_COLL_PATH}"
 fi
 # materialize the package into a collection
 ${BDBAG} --materialize "${FS_PATH}"
@@ -49,7 +54,10 @@ fi
 if [ "$REMOVE_SOURCE" = true ]; then
   /bin/irm -f "${IRODS_PATH}"
 else
-  /bin/itrim -M -S ${IRODS_TARGET_RES} -N 1 ${IRODS_PATH}
+  /bin/itrim -M -S ${IRODS_TARGET_RES} -N 1 ${IRODS_PATH} > /dev/null 2>&1 
+  if [ "$?" -ne "0" ]; then
+    echo "Failure: /bin/itrim -M -S ${IRODS_TARGET_RES} -N 1 ${IRODS_PATH}"
+  fi
 fi
 
 echo "Successfully unbagit the collection: ${IRODS_COLL_PATH}"

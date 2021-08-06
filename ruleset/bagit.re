@@ -13,6 +13,43 @@ SURFcontains(*list,*elem) {
 }
 
 
+SURFgetCollNameFromPackageName(*bag_path) {
+  # get the collection path, removing the final prefix if it exists
+  *coll_path = *bag_path;
+  *suffix_list = list("tar", "tgz", "zip");
+  for(*i=0; *i<size(*suffix_list); *i=*i+1) { 
+    *suffix = elem(*suffix_list, *i);
+    if(*bag_path like "*." ++ "*suffix") {
+      *coll_path = trimr(*bag_path, "." ++ "*suffix");
+    }
+  }
+*coll_path;
+}
+
+
+SURFgetiRODSObjectFSPath(*path, *vault_path) {
+  # get the file system absolute path of the data object or collection
+  *tokens = split("*path","/");
+  *rel_path = "";
+  foreach(*E in tl(*tokens)) {
+    *rel_path = *rel_path ++ "/" ++ *E;
+  }
+  *abs_path = *vault_path ++ *rel_path;
+*abs_path;
+} 
+
+
+SURFgetResourceHostname(*res) {
+  # get the hostname of the resource
+  msiMakeGenQuery("RESC_LOC", "RESC_NAME = '*res'", *genQIn1);
+  msiExecGenQuery(*genQIn1, *genQOut1);
+  foreach(*genQOut1){
+    msiGetValByKey(*genQOut1, "RESC_LOC", *res_loc);
+  }
+*res_loc;
+}
+
+
 SURFgetOwners(*path) {
   # get all the users who are owners of the collection/object
   *users = list()
@@ -36,6 +73,26 @@ SURFgetOwners(*path) {
   }
 
   *users
+}
+
+
+SURFbagitMetadataParser(*op, *transfer_option, *compress, *metadata) {
+#TODO differentiate between bagit and unbagit
+#in the unbagit operation: add the special metadata for Research Drive
+  # get the list of requested operations
+  *operations = split("*op","::");
+  *transfer_option = hd(*operations);
+  # default compression format: tgz
+  *compress = "tgz";
+  *metadata = "";
+  if (size(tl(*operations)) > 0) {
+    *operations = tl(*operations);
+    *compress = hd(*operations);
+  }
+  if (size(tl(*operations)) > 0) {
+    *operations = tl(*operations);
+    *metadata = hd(*operations);
+  }
 }
 
 
@@ -105,39 +162,17 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd_
   writeLine("serverLog", "[SURFbagit] collection: *coll_path, source resource: *source_res, "
            ++ "destination resource: *dest_res, admin user: *admin_user, command: *cmd_name, "
            ++ "vault: *vault_path, operation: *op");
+
   # move all the data to a single resource, recursively through all the sub-collections
   SURFbagitAlignDataResources(*coll_path, *source_res);
-
   # get the file system absolute path of the collection
-  *tokens = split("*coll_path","/");
-  *rel_path = "";
-  foreach(*E in tl(*tokens)) {
-    *rel_path = *rel_path ++ "/" ++ *E;
-  }
-  *abs_path = *vault_path ++ *rel_path;
-
+  *abs_path = SURFgetiRODSObjectFSPath(*coll_path, *vault_path);
   # get the hostname of the destination resource
-  msiMakeGenQuery("RESC_LOC", "RESC_NAME = '*dest_res'", *genQIn1);
-  msiExecGenQuery(*genQIn1, *genQOut1);
-  foreach(*genQOut1){
-    msiGetValByKey(*genQOut1, "RESC_LOC", *res_loc);
-  }
-
+  *res_loc = SURFgetResourceHostname(*dest_res);
   # get the parent collection
   *parent_coll = trimr("*coll_path", "/");
   # get the list of requested operations
-  *operations = split("*op","::");
-  *transfer_option = hd(*operations);
-  *compress = "tgz";
-  *metadata = "";
-  if (size(tl(*operations)) > 0) {
-    *operations = tl(*operations);
-    *compress = hd(*operations);
-  }
-  if (size(tl(*operations)) > 0) {
-    *operations = tl(*operations);
-    *metadata = hd(*operations);
-  }
+  SURFbagitMetadataParser(*op, *transfer_option, *compress, *metadata);
   # set the flag about removing the original collection
   if (*transfer_option == 'move') { *flag = 'true' }
   else { 
@@ -148,6 +183,7 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd_
   msiSetACL("default", "admin:own", "*admin_user", *parent_coll);
   msiSetACL("recursive", "admin:own", "*admin_user", *coll_path);
 
+#TODO skip also in case of move, not just copy
   # in case of copy, check if the target package is already there
   *skip_bagit = 'false';
   if (*flag == 'false') {
@@ -233,24 +269,12 @@ SURFunbagit(*bag_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd
     msiGetValByKey(*genQOut0, "RESC_VAULT_PATH", *vault_path_dest);
   }
 
-  # get the file system absolute path of the collection
-  *tokens = split("*bag_path","/");
-  *rel_path = "";
-  foreach(*E in tl(*tokens)) {
-    *rel_path = *rel_path ++ "/" ++ *E;
-  }
-  *abs_path = *vault_path_dest ++ *rel_path;
-
+  # get the file system absolute path of the bag package
+  *abs_path = SURFgetiRODSObjectFSPath(*bag_path, *vault_path_dest);
   # get the hostname of the destination resource
-  msiMakeGenQuery("RESC_LOC", "RESC_NAME = '*dest_res'", *genQIn1);
-  msiExecGenQuery(*genQIn1, *genQOut1);
-  foreach(*genQOut1){
-    msiGetValByKey(*genQOut1, "RESC_LOC", *res_loc);
-  }
-
+  *res_loc = SURFgetResourceHostname(*dest_res);
   # get the parent collection
   *parent_coll = trimr("*bag_path", "/");
-
   # set the flag about removing the original collection
   if (*op == 'move') { *flag = 'true' }
   else { 
@@ -261,25 +285,32 @@ SURFunbagit(*bag_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd
   msiSetACL("default", "admin:own", "*admin_user", *parent_coll);
   msiSetACL("default", "admin:own", "*admin_user", *bag_path);
 
-  *msi_err = errorcode(msiExecCmd(*cmd_name, "*abs_path *bag_path *source_res *dest_res *flag", "*res_loc", "null", "null", *Result));
-  if (*msi_err >= 0) {
-    msiGetStdoutInExecCmdOut(*Result, *Out);
-  }
-  else {
-    msiGetStderrInExecCmdOut(*Result, *Out);
+  # get the collection path, removing the final prefix if it exists
+  *coll_path = SURFgetCollNameFromPackageName(*bag_path);
+
+#TODO skip always, even in case of move, not just copy
+  # in case of copy, check if the target collection is already there
+  *skip_unbagit = 'false';
+  if (*flag == 'false') {
+    msiMakeGenQuery("count(COLL_NAME)", "COLL_NAME = '*coll_path'", *genQIn2);
+    msiExecGenQuery(*genQIn2, *genQOut2);
+    foreach(*genQOut2){
+      msiGetValByKey(*genQOut2, "COLL_NAME", *coll_number);
+    }
+    if (int(*coll_number) > 0) {
+      *skip_unbagit = 'true';
+      *Out = "collection [*coll_path] already exists, nothing to do."
+    }
   }
 
-  if(*bag_path like "*.tar") {
-	*coll_path = trimr(*bag_path,".tar")
-  }
-  else if(*bag_path like "*.tgz") {
-	*coll_path = trimr(*bag_path,".tgz")
-  }
-  else if(*bag_path like "*.zip") {
-	*coll_path = trimr(*bag_path,".zip")
-  }
-  else {
-	*coll_path = *bag_path
+  if (*skip_unbagit == 'false') {
+    *msi_err = errorcode(msiExecCmd(*cmd_name, "*abs_path *bag_path *source_res *dest_res *flag", "*res_loc", "null", "null", *Result));
+    if (*msi_err >= 0) {
+      msiGetStdoutInExecCmdOut(*Result, *Out);
+    }
+    else {
+      msiGetStderrInExecCmdOut(*Result, *Out);
+    }
   }
 
   # restore the original permissions
@@ -306,25 +337,32 @@ SURFunbagitBatch(*default_resc, *admin_user, *cmd) {
   writeLine("serverLog", "[SURFunbagitBatch] default resource: *default_resc, admin: *admin_user, command: *cmd");
 
   *response = "";
-  msiMakeGenQuery("COLL_NAME, DATA_NAME, DATA_OWNER_NAME, DATA_OWNER_ZONE, META_DATA_ATTR_NAME, META_DATA_ATTR_VALUE, META_DATA_ATTR_UNITS", 
+  msiMakeGenQuery("COLL_NAME, DATA_NAME, DATA_OWNER_NAME, DATA_OWNER_ZONE, META_DATA_ATTR_NAME, META_DATA_ATTR_VALUE, META_DATA_ATTR_UNITS, RESC_NAME", 
                   "META_DATA_ATTR_NAME = 'SURFunbagit' AND COLL_NAME not like '/%/trash/%'", *genQIn);
   msiExecGenQuery(*genQIn, *genQOut);
   foreach(*genQOut){
     msiGetValByKey(*genQOut, "COLL_NAME", *coll_path);
     msiGetValByKey(*genQOut, "DATA_NAME", *bag_file);
+    msiGetValByKey(*genQOut, "RESC_NAME", *source_res);
     msiGetValByKey(*genQOut, "META_DATA_ATTR_NAME", *name);
     msiGetValByKey(*genQOut, "META_DATA_ATTR_VALUE", *dest_res);
     msiGetValByKey(*genQOut, "META_DATA_ATTR_UNITS", *operation);
     msiGetValByKey(*genQOut, "DATA_OWNER_NAME", *owner_name);
     msiGetValByKey(*genQOut, "DATA_OWNER_ZONE", *owner_zone);
 
-    *owner = *owner_name ++ "#" ++ *owner_zone
-    *path = *coll_path ++ "/" ++ *bag_file
-    *users = SURFgetOwners(*path)
+    *owner = *owner_name ++ "#" ++ *owner_zone;
+    *path = *coll_path ++ "/" ++ *bag_file;
+    *users = SURFgetOwners(*path);
 
-    *resp = SURFunbagit(*path, *default_resc, *dest_res, *owner, *admin_user, *users, *cmd, *operation);
+    *resp = SURFunbagit(*path, *source_res, *default_resc, *owner, *admin_user, *users, *cmd, *operation);
     writeLine("serverLog", "[SURFunbagitBatch] *resp");
     *response = *response ++ "*resp" ++ "; ";
+
+#TODO add if condition to skip the next lines if the unbagit operation fails or
+# the dest_res = default_resc
+    *unbagit_coll_path = SURFgetCollNameFromPackageName(*path);
+    SURFbagitAlignDataResources(*unbagit_coll_path, *dest_res);  
+  
   }
 
   *response;
