@@ -123,20 +123,23 @@ SURFphymoveDataPerCollection(*default_resc, *path, *default_resc_list, *data_lis
 
     writeLine("serverLog", "[SURFphymoveDataPerCollection] default resource: *default_resc, collection: *path");
     # loop over all the objects in other resources
+    *err_count = 0
     for(*i=0; *i<size(*data_list); *i=*i+1) {
       *data_name = hd(elem(*data_list, *i));
       *data_res = elem(elem(*data_list, *i), 1);
       *data_path = *path ++ "/" ++ *data_name
       # if the object is already stored in the default resource, trim the other copy
       if (SURFcontains(*default_resc_list, *data_name)) {
-        msiDataObjTrim("*data_path", "*data_res", "null", "1", "IRODS_ADMIN", *status);
+        *msi_err = errorcode(msiDataObjTrim("*data_path", "*data_res", "null", "1", "IRODS_ADMIN", *status));
       }
       # if not, move it to the default resource
       else {
-        msiDataObjPhymv("*data_path", "*default_resc", "*data_res", "null", "IRODS_ADMIN", *status)
+        *msi_err = errorcode(msiDataObjPhymv("*data_path", "*default_resc", "*data_res", "null", "IRODS_ADMIN", *status));
         *default_resc_list = cons(*data_name, *default_resc_list)
       }
+      if (*msi_err < 0) { *err_count = *err_count + 1 }
     }
+*err_count;
 }
 
 
@@ -146,14 +149,16 @@ SURFbagitAlignDataResources(*coll_path, *dest_res) {
   *data_list = list()
   *default_resc_list = list()
   SURFgroupDataByResource(*dest_res, *coll_path, *default_resc_list, *data_list);
-  SURFphymoveDataPerCollection(*dest_res, *coll_path, *default_resc_list, *data_list);
+  *tot_err = SURFphymoveDataPerCollection(*dest_res, *coll_path, *default_resc_list, *data_list);
   *search_key = "*coll_path" ++ "/%"
   msiMakeGenQuery("COLL_NAME", "COLL_NAME like '*search_key'", *genQIn);
   msiExecGenQuery(*genQIn, *genQOut);
   foreach(*genQOut){
     msiGetValByKey(*genQOut, "COLL_NAME", *path);
-    SURFbagitAlignDataResources(*path, *dest_res);
+    *err = SURFbagitAlignDataResources(*path, *dest_res);
+    *tot_err = *tot_err + *err
   }
+*tot_err;
 }
 
 
@@ -183,15 +188,12 @@ SURFbagit(*coll_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd_
   msiSetACL("default", "admin:own", "*admin_user", *parent_coll);
   msiSetACL("recursive", "admin:own", "*admin_user", *coll_path);
 
-#TODO skip also in case of move, not just copy
-  # in case of copy, check if the target package is already there
+  # check if the target package is already there
   *skip_bagit = 'false';
-  if (*flag == 'false') {
-    *target_obj = "*coll_path" ++ ".*compress";
-    if (errorcode(msiObjStat(*target_obj, *stat)) >= 0) {
-      *skip_bagit = 'true';
-      *Out = "bagit package [*target_obj] already exists, nothing to do."
-    }
+  *target_obj = "*coll_path" ++ ".*compress";
+  if (errorcode(msiObjStat(*target_obj, *stat)) >= 0) {
+    *skip_bagit = 'true';
+    *Out = "bagit package [*target_obj] already exists, nothing to do."
   }
   if (*skip_bagit == 'false') {
     *msi_err = errorcode(msiExecCmd(*cmd_name, "*abs_path *coll_path *source_res *dest_res *flag *compress *metadata", 
@@ -288,19 +290,16 @@ SURFunbagit(*bag_path, *source_res, *dest_res, *owner, *admin_user, *users, *cmd
   # get the collection path, removing the final prefix if it exists
   *coll_path = SURFgetCollNameFromPackageName(*bag_path);
 
-#TODO skip always, even in case of move, not just copy
-  # in case of copy, check if the target collection is already there
+  # check if the target collection is already there
   *skip_unbagit = 'false';
-  if (*flag == 'false') {
-    msiMakeGenQuery("count(COLL_NAME)", "COLL_NAME = '*coll_path'", *genQIn2);
-    msiExecGenQuery(*genQIn2, *genQOut2);
-    foreach(*genQOut2){
-      msiGetValByKey(*genQOut2, "COLL_NAME", *coll_number);
-    }
-    if (int(*coll_number) > 0) {
-      *skip_unbagit = 'true';
-      *Out = "collection [*coll_path] already exists, nothing to do."
-    }
+  msiMakeGenQuery("count(COLL_NAME)", "COLL_NAME = '*coll_path'", *genQIn2);
+  msiExecGenQuery(*genQIn2, *genQOut2);
+  foreach(*genQOut2){
+    msiGetValByKey(*genQOut2, "COLL_NAME", *coll_number);
+  }
+  if (int(*coll_number) > 0) {
+    *skip_unbagit = 'true';
+    *Out = "collection [*coll_path] already exists, nothing to do."
   }
 
   if (*skip_unbagit == 'false') {
@@ -358,10 +357,16 @@ SURFunbagitBatch(*default_resc, *admin_user, *cmd) {
     writeLine("serverLog", "[SURFunbagitBatch] *resp");
     *response = *response ++ "*resp" ++ "; ";
 
-#TODO add if condition to skip the next lines if the unbagit operation fails or
-# the dest_res = default_resc
-    *unbagit_coll_path = SURFgetCollNameFromPackageName(*path);
-    SURFbagitAlignDataResources(*unbagit_coll_path, *dest_res);  
+    if (*response like "Successfully unbagit the collection.*" && *dest_res != *default_resc) {
+      *unbagit_coll_path = SURFgetCollNameFromPackageName(*path);
+      *surf_err = SURFbagitAlignDataResources(*unbagit_coll_path, *dest_res);
+      if (*surf_err > 0) {
+        writeLine("serverLog", "[SURFunbagitBatch] resources' alignment number of errors: *surf_err");
+      } 
+      else {
+        writeLine("serverLog", "[SURFunbagitBatch] collection [*unbagit_coll_path] successfully moved to resource: *dest_res");
+      }
+    }
   
   }
 

@@ -26,7 +26,7 @@ if [ "$?" -ne "0" ]; then
 fi
 # check if the collection already exists on the fs and remove it
 if [ -d "${FS_COLL_PATH}" ]; then
-  /bin/rmdir "${FS_COLL_PATH}"
+  /bin/rm -rf "${FS_COLL_PATH}"
 fi
 # materialize the package into a collection
 ${BDBAG} --materialize "${FS_PATH}"
