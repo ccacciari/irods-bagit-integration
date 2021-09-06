@@ -43,7 +43,8 @@ It is possible to export the irods avus as a json file included in the bagit arc
 To enable this feature is necessary to deploy the script available here:  
 https://git.ia.surfsara.nl/data-management-services/irods-metadata-translator  
 
-It should be placed in /etc/irods. It requires both python packages irods-avu-json and python-irodsclient.
+It should be placed in /etc/irods/scripts. It requires both python packages irods-avu-json and python-irodsclient.
+The files in the folder "filters" should be placed in /etc/irods. They filter out the keyword "SURFbagit" and "SURFunbagit" from the imported/exported metadata.
 Then it possible to export the metadata adding the following option in the usual way:
 
 ```
@@ -51,7 +52,8 @@ $ imeta set -C /surfTestZone2/home/claudio/mylibrary2 SURFbagit archive copy::zi
 ```
 
 The metadata are exported recursively for all the sub-collections and objects present under the main collection.  
-Pay attention that the position of the three options is important: \[copy|move\]::\[zip|tar|tgz\]::\[avu\]  
+Pay attention that the position of the three options is important: \[copy|move\]::\[zip|tar|tgz\]::\[avu|acl\]  
+By default the avus are exported, while acls must be selected explicitly. However acls are not imported.
 The SURFunbagitBatch checks automatically if the exported metadata are available within the bagit package and if it is the case than they are imported back to iRODS.  
 
 ## TODO
